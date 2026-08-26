@@ -7,6 +7,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { chromium } from 'playwright';
 import { fileURLToPath } from 'node:url';
 import { ensureSchema, handleGet, handlePost } from '../api/comments.js';
+import { handleGet as likeGet, handlePost as likePost } from '../api/likes.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const db = new PGlite();
@@ -21,7 +22,7 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
-  if (url.pathname === '/api/comments') {
+  if (url.pathname === '/api/comments' || url.pathname === '/api/likes') {
     // Meniru runtime Node Vercel: query sudah terurai, body JSON sudah di-parse.
     req.query = Object.fromEntries(url.searchParams);
     if (req.method === 'POST') {
@@ -32,8 +33,9 @@ const server = http.createServer(async (req, res) => {
     let code = 200, payload = null;
     const shim = { setHeader: (k, v) => res.setHeader(k, v), status(c) { code = c; return this; }, json(o) { payload = o; return this; } };
     try {
-      if (req.method === 'GET') await handleGet(req, shim, sql);
-      else if (req.method === 'POST') await handlePost(req, shim, sql);
+      const suka = url.pathname === '/api/likes';
+      if (req.method === 'GET') await (suka ? likeGet : handleGet)(req, shim, sql);
+      else if (req.method === 'POST') await (suka ? likePost : handlePost)(req, shim, sql);
       else { code = 405; payload = { error: 'nope' }; }
     } catch (e) { code = 500; payload = { error: String(e) }; }
     res.writeHead(code, { 'Content-Type': 'application/json' });
@@ -132,6 +134,60 @@ await pageObj.waitForSelector('.cmt-panel:not([hidden]) .cmt-item');
 check('komentar lama termuat kembali', (await pageObj.locator('.cmt-item').count()) === 2);
 check('nama pengunjung diingat', (await pageObj.inputValue('.cmt-panel:not([hidden]) input[type=text]')) === 'Eve');
 
+// ---- suka ----
+const likeBtns = pageObj.locator('.cmt-like');
+check('satu tombol suka per foto', (await likeBtns.count()) === imgs, await likeBtns.count());
+
+const like1 = likeBtns.first();
+check('mulai tanpa angka', (await like1.locator('.cmt-count').innerText()) === '');
+await like1.click();
+await pageObj.waitForFunction(() => document.querySelector('.cmt-like .cmt-count').textContent === '1');
+check('sekali ketuk -> 1', (await like1.locator('.cmt-count').innerText()) === '1');
+check('hatinya jadi terisi', await like1.evaluate((b) => b.classList.contains('is-liked')));
+check('aria-pressed ikut berubah', (await like1.getAttribute('aria-pressed')) === 'true');
+
+// ketuk lagi = batal
+await like1.click();
+await pageObj.waitForFunction(() => document.querySelector('.cmt-like .cmt-count').textContent === '');
+check('ketuk lagi membatalkan', (await like1.evaluate((b) => b.classList.contains('is-liked'))) === false);
+
+// suka lagi, lalu pastikan bertahan setelah muat ulang
+await like1.click();
+await pageObj.waitForFunction(() => document.querySelector('.cmt-like .cmt-count').textContent === '1');
+await pageObj.reload({ waitUntil: 'domcontentloaded' });
+await pageObj.waitForSelector('.cmt-like');
+await pageObj.waitForFunction(() => document.querySelector('.cmt-like .cmt-count').textContent === '1');
+check('suka bertahan setelah muat ulang', (await pageObj.locator('.cmt-like').first().locator('.cmt-count').innerText()) === '1');
+check('hati tetap terisi setelah muat ulang', await pageObj.locator('.cmt-like').first().evaluate((b) => b.classList.contains('is-liked')));
+
+// dua ketukan sangat cepat tidak boleh terhitung dua
+const like2 = pageObj.locator('.cmt-like').nth(2);
+await like2.click();
+await like2.click();
+await pageObj.waitForTimeout(600);
+const dobel = await like2.locator('.cmt-count').innerText();
+check('dua ketukan cepat tidak jadi 2', dobel === '' || dobel === '1', dobel);
+
+// pengunjung lain (localStorage bersih) menambah hitungan, bukan menimpanya
+const ctxLain = await browser.newContext({ viewport: { width: 700, height: 900 } });
+const pLain = await ctxLain.newPage();
+await pLain.goto(`${base}/hari-08.html`, { waitUntil: 'domcontentloaded' });
+await pLain.waitForSelector('.cmt-like');
+check('pengunjung lain melihat angka yang sama', (await pLain.locator('.cmt-like').first().locator('.cmt-count').innerText()) === '1');
+check('tapi hatinya belum terisi untuk dia', (await pLain.locator('.cmt-like').first().evaluate((b) => b.classList.contains('is-liked'))) === false);
+await pLain.locator('.cmt-like').first().click();
+await pLain.waitForFunction(() => document.querySelector('.cmt-like .cmt-count').textContent === '2');
+check('suka pengunjung kedua menambah jadi 2', (await pLain.locator('.cmt-like').first().locator('.cmt-count').innerText()) === '2');
+await ctxLain.close();
+
+// komentar masih jalan berdampingan dengan suka
+await pageObj.reload({ waitUntil: 'domcontentloaded' });
+await pageObj.waitForSelector('.cmt-badge.has-cmt');
+check('lencana komentar tidak terganggu tombol suka', (await pageObj.locator('.cmt-badge').first().locator('.cmt-count').innerText()) === '2');
+await pageObj.locator('.cmt-badge').first().click();
+await pageObj.waitForSelector('.cmt-panel:not([hidden]) .cmt-item');
+check('panel komentar masih terbuka normal', (await pageObj.locator('.cmt-item').count()) === 2);
+
 // Rekam tampilannya untuk diperiksa mata.
 const panel = pageObj.locator('.cmt-panel:not([hidden])');
 await panel.scrollIntoViewIfNeeded();
@@ -147,7 +203,7 @@ await ctx.route('**/api/comments*', (r) => r.abort());
 const p2 = await ctx.newPage();
 await p2.goto(`${base}/hari-07.html`, { waitUntil: 'domcontentloaded' });
 await p2.waitForTimeout(700);
-check('API mati -> tidak ada UI komentar sama sekali', (await p2.locator('.cmt-badge, .cmt-panel').count()) === 0);
+check('API mati -> tidak ada UI komentar maupun suka', (await p2.locator('.cmt-badge, .cmt-panel, .cmt-like, .cmt-bar').count()) === 0);
 check('API mati -> gambar tetap tampil', (await p2.locator('figure img').first().boundingBox()).height > 50);
 
 check('tidak ada pengecualian JavaScript', jsErrors.length === 0, jsErrors.slice(0, 3));

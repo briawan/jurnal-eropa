@@ -32,8 +32,8 @@ export function cariConnectionString(env) {
 
 const CONN = cariConnectionString(process.env);
 
-const PHOTO_RE = /^[a-z0-9][a-z0-9._-]{0,80}\.(?:jpg|jpeg|png|webp)$/i;
-const PAGE_RE = /^[a-z0-9][a-z0-9-]{0,40}\.html$/i;
+export const PHOTO_RE = /^[a-z0-9][a-z0-9._-]{0,80}\.(?:jpg|jpeg|png|webp)$/i;
+export const PAGE_RE = /^[a-z0-9][a-z0-9-]{0,40}\.html$/i;
 
 const MAX_NAME = 40;
 const MAX_BODY = 1000;
@@ -55,9 +55,22 @@ export async function ensureSchema(sql) {
   await sql`create index if not exists comments_photo_idx on comments (photo_id, created_at)`;
   await sql`create index if not exists comments_page_idx on comments (page)`;
   await sql`create index if not exists comments_rate_idx on comments (ip_hash, created_at)`;
+
+  // Satu baris per pengunjung per foto: kunci gandanya yang menjaga agar satu orang
+  // tidak terhitung dua kali, dan yang membuat batal-suka jadi sekadar menghapus baris.
+  await sql`create table if not exists likes (
+    photo_id   text not null,
+    page       text not null,
+    visitor_id text not null,
+    ip_hash    text,
+    created_at timestamptz not null default now(),
+    primary key (photo_id, visitor_id)
+  )`;
+  await sql`create index if not exists likes_page_idx on likes (page)`;
+  await sql`create index if not exists likes_rate_idx on likes (ip_hash, created_at)`;
 }
 
-function clientIp(req) {
+export function clientIp(req) {
   const fwd = req.headers['x-forwarded-for'];
   if (typeof fwd === 'string' && fwd) return fwd.split(',')[0].trim();
   if (Array.isArray(fwd) && fwd.length) return String(fwd[0]).split(',')[0].trim();
@@ -65,7 +78,7 @@ function clientIp(req) {
 }
 
 // IP tidak pernah disimpan mentah — hanya sidik jarinya, dan itu cuma dipakai untuk rate limit.
-function hashIp(req) {
+export function hashIp(req) {
   const salt = process.env.COMMENTS_SALT || 'jurnal-eropa-2026';
   return createHash('sha256').update(`${clientIp(req)}|${salt}`).digest('hex').slice(0, 32);
 }
@@ -82,7 +95,7 @@ function readBody(req) {
 }
 
 // Buang karakter kontrol, samakan akhir baris, rapatkan baris kosong beruntun.
-function clean(value, max) {
+export function clean(value, max) {
   return String(value ?? '')
     .replace(/\r\n?/g, '\n')
     .replace(/[\u0000-\u0009\u000B\u000C\u000E-\u001F\u007F]/g, '')
@@ -145,14 +158,15 @@ export async function handleGet(req, res, sql) {
   // Satu halaman: cuma jumlahnya, untuk lencana di tiap foto.
   if (page) {
     if (!PAGE_RE.test(page)) return res.status(400).json({ error: 'Nama halaman tidak valid.' });
-    const rows = await sql`
-      select photo_id, count(*)::int as total
-      from comments
-      where page = ${page}
-      group by photo_id`;
+    const [commentRows, likeRows] = await Promise.all([
+      sql`select photo_id, count(*)::int as total from comments where page = ${page} group by photo_id`,
+      sql`select photo_id, count(*)::int as total from likes where page = ${page} group by photo_id`,
+    ]);
     const counts = {};
-    for (const row of rows) counts[row.photo_id] = row.total;
-    return res.status(200).json({ page, counts });
+    for (const row of commentRows) counts[row.photo_id] = row.total;
+    const likes = {};
+    for (const row of likeRows) likes[row.photo_id] = row.total;
+    return res.status(200).json({ page, counts, likes });
   }
 
   return res.status(400).json({ error: 'Sebutkan photo atau page.' });
