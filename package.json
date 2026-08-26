@@ -1,0 +1,15 @@
+{
+  "name": "jurnal-eropa",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Jurnal Eropa 2026 — catatan harian road trip Eropa Tengah & Inggris",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test:setup": "npm install --no-save @electric-sql/pglite playwright",
+    "test": "node test/api.test.mjs && node test/browser.test.mjs"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^0.10.4"
+  }
+}
