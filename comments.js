@@ -11,6 +11,8 @@
   if (!/^hari-\d+\.html$/i.test(page)) return;
 
   var NAME_KEY = 'jurnal-eropa:nama';
+  var VISITOR_KEY = 'jurnal-eropa:pengunjung';
+  var LIKED_KEY = 'jurnal-eropa:disukai';
   var MAX_NAME = 40;
   var MAX_BODY = 1000;
 
@@ -22,6 +24,28 @@
     });
   } catch (e) {
     waktu = null;
+  }
+
+  // Penanda acak per browser. Bukan identitas: cuma supaya satu orang tidak terhitung
+  // dua kali, dan supaya sukanya bisa dibatalkan lagi.
+  function visitorId() {
+    var id = null;
+    try { id = localStorage.getItem(VISITOR_KEY); } catch (e) {}
+    if (id && /^[a-z0-9]{8,64}$/i.test(id)) return id;
+    if (window.crypto && crypto.randomUUID) id = crypto.randomUUID().replace(/-/g, '');
+    else id = (Date.now().toString(36) + Math.random().toString(36).slice(2)).replace(/[^a-z0-9]/gi, '').slice(0, 32);
+    while (id.length < 8) id += '0';
+    try { localStorage.setItem(VISITOR_KEY, id); } catch (e) {}
+    return id;
+  }
+
+  // Foto mana saja yang pernah disukai dari browser ini — supaya hatinya langsung
+  // tampil terisi saat halaman dibuka, tanpa perlu menanyakannya satu per satu.
+  function readLiked() {
+    try { return JSON.parse(localStorage.getItem(LIKED_KEY) || '{}') || {}; } catch (e) { return {}; }
+  }
+  function writeLiked(map) {
+    try { localStorage.setItem(LIKED_KEY, JSON.stringify(map)); } catch (e) {}
   }
 
   function el(tag, className, text) {
@@ -178,31 +202,103 @@
     return { panel: panel, list: list, nameInput: nameInput, bodyInput: bodyInput };
   }
 
-  function attach(img, counts) {
+  // Tombol suka. Berubah lebih dulu di layar, lalu dikoreksi kalau server menolak —
+  // supaya satu ketukan terasa langsung, bukan menunggu perjalanan bolak-balik.
+  function buildLike(photo, state) {
+    var btn = el('button', 'cmt-like');
+    btn.type = 'button';
+    var heart = el('span', 'cmt-heart');
+    heart.setAttribute('aria-hidden', 'true');
+    heart.textContent = '\u2665';
+    var count = el('span', 'cmt-count');
+    btn.appendChild(heart);
+    btn.appendChild(count);
+    btn.appendChild(el('span', 'cmt-sr', 'Suka foto ' + photo));
+
+    var liked = !!state.liked[photo];
+    var busy = false;
+
+    function paint() {
+      btn.classList.toggle('is-liked', liked);
+      btn.setAttribute('aria-pressed', liked ? 'true' : 'false');
+      btn.title = liked ? 'Batalkan suka' : 'Suka foto ini';
+      count.textContent = labelFor(state.likes[photo] || 0);
+    }
+    paint();
+
+    btn.addEventListener('click', function () {
+      if (busy) return;
+      busy = true;
+
+      var sebelumnya = { liked: liked, total: state.likes[photo] || 0 };
+      liked = !liked;
+      state.likes[photo] = Math.max(0, sebelumnya.total + (liked ? 1 : -1));
+      if (liked) state.liked[photo] = 1; else delete state.liked[photo];
+      writeLiked(state.liked);
+      paint();
+      if (liked) {
+        btn.classList.remove('pop');
+        void btn.offsetWidth; // paksa animasinya mulai dari awal lagi
+        btn.classList.add('pop');
+      }
+
+      fetch('/api/likes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ photo: photo, page: page, visitor: visitorId(), liked: liked })
+      }).then(function (res) {
+        return res.ok ? res.json() : Promise.reject(new Error('gagal'));
+      }).then(function (data) {
+        // Angka dari server yang menang — misalnya kalau orang lain ikut menyukai.
+        state.likes[photo] = data.total;
+        liked = !!data.liked;
+        if (liked) state.liked[photo] = 1; else delete state.liked[photo];
+        writeLiked(state.liked);
+        paint();
+      }).catch(function () {
+        // Kembalikan seperti semula supaya angkanya tidak berbohong.
+        liked = sebelumnya.liked;
+        state.likes[photo] = sebelumnya.total;
+        if (liked) state.liked[photo] = 1; else delete state.liked[photo];
+        writeLiked(state.liked);
+        paint();
+      }).then(function () {
+        busy = false;
+      });
+    });
+
+    return btn;
+  }
+
+  function attach(img, state) {
     var fig = img.closest('figure');
     if (!fig) return;
     var photo = photoId(img);
     if (!photo) return;
 
-    // Bungkus gambar supaya lencananya bisa menempel di sudut foto, bukan di sudut keterangan.
+    // Bungkus gambar supaya tombolnya menempel di sudut foto, bukan di sudut keterangan.
     var wrap = el('span', 'cmt-wrap');
     img.parentNode.insertBefore(wrap, img);
     wrap.appendChild(img);
 
     var badge = el('button', 'cmt-badge');
     badge.type = 'button';
-    var count = counts[photo] || 0;
+    var count = state.counts[photo] || 0;
     if (count > 0) badge.classList.add('has-cmt');
     badge.setAttribute('aria-expanded', 'false');
     badge.title = 'Komentari foto ini';
 
     var icon = el('span', 'cmt-icon');
     icon.setAttribute('aria-hidden', 'true');
-    icon.textContent = '💬';
+    icon.textContent = '\uD83D\uDCAC';
     badge.appendChild(icon);
     badge.appendChild(el('span', 'cmt-count', labelFor(count)));
     badge.appendChild(el('span', 'cmt-sr', 'Komentar foto ' + photo));
-    wrap.appendChild(badge);
+
+    var bar = el('div', 'cmt-bar');
+    bar.appendChild(buildLike(photo, state));
+    bar.appendChild(badge);
+    wrap.appendChild(bar);
 
     var built = null;
 
@@ -219,7 +315,7 @@
       }
 
       if (!built) {
-        built = buildPanel(photo, badge, counts);
+        built = buildPanel(photo, badge, state.counts);
         built.badge = badge;
         anchorFor(fig).insertAdjacentElement('afterend', built.panel);
 
@@ -227,9 +323,9 @@
           .then(function (res) { return res.ok ? res.json() : Promise.reject(new Error('gagal')); })
           .then(function (data) {
             renderThread(built.list, data.comments || []);
-            counts[photo] = (data.comments || []).length;
-            badge.querySelector('.cmt-count').textContent = labelFor(counts[photo]);
-            if (counts[photo] > 0) badge.classList.add('has-cmt');
+            state.counts[photo] = (data.comments || []).length;
+            badge.querySelector('.cmt-count').textContent = labelFor(state.counts[photo]);
+            if (state.counts[photo] > 0) badge.classList.add('has-cmt');
           })
           .catch(function () {
             built.list.textContent = '';
@@ -245,10 +341,10 @@
     });
   }
 
-  function init(counts) {
+  function init(state) {
     var imgs = document.querySelectorAll('figure img[src^="images/"]');
     if (!imgs.length) return;
-    Array.prototype.forEach.call(imgs, function (img) { attach(img, counts); });
+    Array.prototype.forEach.call(imgs, function (img) { attach(img, state); });
     document.documentElement.classList.add('cmt-on');
   }
 
@@ -257,7 +353,9 @@
   function start() {
     fetch('/api/comments?page=' + encodeURIComponent(page))
       .then(function (res) { return res.ok ? res.json() : Promise.reject(new Error('gagal')); })
-      .then(function (data) { init(data.counts || {}); })
+      .then(function (data) {
+        init({ counts: data.counts || {}, likes: data.likes || {}, liked: readLiked() });
+      })
       .catch(function () { /* diam */ });
   }
 

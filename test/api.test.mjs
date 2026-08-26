@@ -2,6 +2,7 @@
 // Menguji SQL sungguhan di Postgres sungguhan (PGlite, Postgres versi WASM).
 import { PGlite } from '@electric-sql/pglite';
 import { ensureSchema, handleGet, handlePost, cariConnectionString } from '../api/comments.js';
+import { handleGet as likeGet, handlePost as likePost } from '../api/likes.js';
 
 const db = new PGlite();
 const sql = async (strings, ...values) => {
@@ -109,6 +110,77 @@ await handleGet(req({ query: { photo: "x.jpg'; drop table comments; --" } }), r,
 check('foto berisi SQL ditolak -> 400', r.out.code === 400, r.out);
 const alive = await sql`select count(*)::int as n from comments`;
 check('tabel masih ada setelah percobaan injeksi', alive[0].n > 0, alive);
+
+// ============ SUKA ============
+const V1 = 'pengunjungsatu01';
+const V2 = 'pengunjungdua002';
+const foto = 'h8-panorama-danau.jpg';
+const likeReq = (body, ip) => ({ headers: { 'x-forwarded-for': ip || '203.0.113.9' }, body });
+
+// menyukai
+r = mkRes();
+await likePost(likeReq({ photo: foto, page: 'hari-08.html', visitor: V1, liked: true }), r, sql);
+check('suka pertama -> total 1', r.out.code === 200 && r.out.body.total === 1 && r.out.body.liked === true, r.out.body);
+
+// menyukai lagi dari pengunjung yang sama tidak menambah
+r = mkRes();
+await likePost(likeReq({ photo: foto, page: 'hari-08.html', visitor: V1, liked: true }), r, sql);
+check('suka ganda dari orang yang sama tetap 1', r.out.body.total === 1, r.out.body);
+
+// orang kedua menambah
+r = mkRes();
+await likePost(likeReq({ photo: foto, page: 'hari-08.html', visitor: V2, liked: true }, '198.51.100.9'), r, sql);
+check('pengunjung kedua -> total 2', r.out.body.total === 2, r.out.body);
+
+// membatalkan suka
+r = mkRes();
+await likePost(likeReq({ photo: foto, page: 'hari-08.html', visitor: V1, liked: false }), r, sql);
+check('batal suka -> total 1', r.out.body.total === 1 && r.out.body.liked === false, r.out.body);
+
+// membatalkan yang belum pernah disukai tidak membuat angka minus
+r = mkRes();
+await likePost(likeReq({ photo: foto, page: 'hari-08.html', visitor: 'belumpernahsuka1', liked: false }), r, sql);
+check('batal suka yang tidak ada tidak bikin minus', r.out.body.total === 1, r.out.body);
+
+// validasi
+for (const [label, body] of [
+  ['foto ngawur', { photo: '../rahasia', page: 'hari-08.html', visitor: V1, liked: true }],
+  ['halaman ngawur', { photo: foto, page: 'jahat.php', visitor: V1, liked: true }],
+  ['penanda pengunjung kosong', { photo: foto, page: 'hari-08.html', visitor: '', liked: true }],
+  ['penanda pengunjung ngawur', { photo: foto, page: 'hari-08.html', visitor: "x'; drop table likes; --", liked: true }],
+]) {
+  const rr = mkRes();
+  await likePost(likeReq(body), rr, sql);
+  check('suka: ' + label + ' -> 400', rr.out.code === 400, rr.out);
+}
+const likesAlive = await sql`select count(*)::int as n from likes`;
+check('tabel likes selamat dari percobaan injeksi', likesAlive[0].n === 1, likesAlive);
+
+// GET satu foto: jumlah + apakah pengunjung ini sudah menyukainya
+r = mkRes();
+await likeGet({ headers: {}, query: { photo: foto, visitor: V2 } }, r, sql);
+check('GET suka: V2 tercatat sudah menyukai', r.out.body.total === 1 && r.out.body.liked === true, r.out.body);
+r = mkRes();
+await likeGet({ headers: {}, query: { photo: foto, visitor: V1 } }, r, sql);
+check('GET suka: V1 sudah membatalkan', r.out.body.liked === false, r.out.body);
+r = mkRes();
+await likeGet({ headers: {}, query: { photo: foto } }, r, sql);
+check('GET suka tanpa penanda tetap memberi jumlah', r.out.body.total === 1 && r.out.body.liked === false, r.out.body);
+
+// rate limit suka
+let likeLimited = false;
+for (let i = 0; i < 130; i++) {
+  const rr = mkRes();
+  await likePost(likeReq({ photo: 'h8-bebek.jpg', page: 'hari-08.html', visitor: 'banjir' + String(i).padStart(10, '0'), liked: true }, '192.0.2.55'), rr, sql);
+  if (rr.out.code === 429) { likeLimited = true; break; }
+}
+check('rate limit suka menahan banjir dari satu IP', likeLimited);
+
+// jumlah suka ikut di GET halaman
+r = mkRes();
+await handleGet(req({ query: { page: 'hari-08.html' } }), r, sql);
+check('GET halaman membawa jumlah suka sekalian', r.out.body.likes && r.out.body.likes[foto] === 1, r.out.body.likes);
+check('GET halaman tetap membawa jumlah komentar', r.out.body.counts['h8-sarapan-hotel.jpg'] === 1, r.out.body.counts);
 
 // --- pencarian connection string, apa pun nama variabelnya ---
 const PG = 'postgresql://u:p@host/db';

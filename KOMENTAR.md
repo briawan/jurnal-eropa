@@ -1,7 +1,9 @@
-# Komentar per foto — cara menyalakannya
+# Komentar & suka per foto — cara menyalakannya
 
-Pengunjung bisa berkomentar di setiap foto. **Cukup isi nama** — tidak ada pendaftaran,
-tidak ada login, tidak ada email. Komentar langsung tampil.
+Pengunjung bisa **menyukai** dan **berkomentar** di setiap foto.
+
+- **Suka** cukup satu ketukan pada tanda hati. Tidak perlu isi apa pun.
+- **Komentar** cukup isi nama — tidak ada pendaftaran, login, atau email. Langsung tampil.
 
 Kodenya sudah lengkap dan ikut ter-deploy. Yang tersisa cuma satu langkah:
 **memasang databasenya.** Selama database belum ada, situs tampil **persis seperti
@@ -18,8 +20,8 @@ ditakutkan kalau langkah ini ditunda.
    **Preview**, dan **biarkan kolom Custom Prefix kosong**. Lalu **Connect**
 4. Buka tab **Deployments**, klik deployment paling atas → **Redeploy**
 
-Selesai. Tabel `comments` dibuat sendiri saat komentar pertama masuk — tidak perlu
-menjalankan SQL apa pun.
+Selesai. Tabel `comments` dan `likes` dibuat sendiri saat permintaan pertama masuk —
+tidak perlu menjalankan SQL apa pun.
 
 Vercel otomatis menyuntikkan `DATABASE_URL` ke project. Nama variabel lain juga diterima:
 `POSTGRES_URL`, `DATABASE_URL_UNPOOLED`, `POSTGRES_URL_NON_POOLING`. Dan kalau semuanya
@@ -57,6 +59,20 @@ delete from comments where name = 'Spammer';
 delete from comments where photo_id = 'h8-bebek.jpg';
 ```
 
+### Suka
+
+```sql
+-- foto paling disukai
+select photo_id, count(*)::int as suka
+from likes group by photo_id order by suka desc limit 20;
+
+-- jumlah suka per halaman
+select page, count(*)::int as suka from likes group by page order by page;
+
+-- hapus suka untuk satu foto
+delete from likes where photo_id = 'h8-bebek.jpg';
+```
+
 ---
 
 ## Yang sudah dipasang sebagai pengaman
@@ -69,6 +85,13 @@ delete from comments where photo_id = 'h8-bebek.jpg';
 | Honeypot | Ada kolom isian tersembunyi; kalau terisi, kiriman dibuang diam-diam. |
 | Batas panjang | Nama 40 karakter, komentar 1000 karakter. Karakter kontrol dibuang. |
 | Privasi | IP tidak pernah disimpan mentah — hanya hash SHA-256 bergaram, dan itu cuma dipakai untuk rate limit. |
+| Suka tidak terhitung ganda | Kunci ganda `(photo_id, visitor_id)` di database, bukan pengecekan terpisah — jadi dua ketukan cepat tetap terhitung satu. |
+| Rate limit suka | 120 tindakan per IP per 10 menit. Sengaja longgar: satu halaman berisi puluhan foto. |
+
+**Batas kejujuran fitur suka:** penanda pengunjung disimpan di `localStorage` browsernya.
+Orang yang menghapusnya bisa menyukai foto yang sama lagi. Untuk jurnal perjalanan ini
+itu cukup — mencegah hitungan ganda karena tidak sengaja, bukan mencegah orang yang
+memang berniat menaikkan angka.
 
 ---
 
@@ -77,7 +100,7 @@ delete from comments where photo_id = 'h8-bebek.jpg';
 | Berkas | Isi |
 |---|---|
 | `api/comments.js` | Serverless function Vercel. `GET ?page=` mengembalikan jumlah komentar per foto; `GET ?photo=` mengembalikan isi percakapan; `POST` menyimpan komentar baru. |
-| `comments.js` | Skrip sisi pengunjung. Memasang lencana di sudut tiap foto dan panel komentarnya. Kalau API gagal, skrip ini diam dan halaman tampil apa adanya. |
+| `comments.js` | Skrip sisi pengunjung. Memasang tombol suka dan lencana komentar di sudut tiap foto, plus panel komentarnya. Kalau API gagal, skrip ini diam dan halaman tampil apa adanya. |
 | `styles.css` | Bagian `--- komentar per foto ---` di paling bawah. |
 | `hari-*.html` | Satu baris `<script src="comments.js" defer>` sebelum `</body>`. |
 
