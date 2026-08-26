@@ -99,7 +99,8 @@ memang berniat menaikkan angka.
 
 | Berkas | Isi |
 |---|---|
-| `api/comments.js` | Serverless function Vercel. `GET ?page=` mengembalikan jumlah komentar per foto; `GET ?photo=` mengembalikan isi percakapan; `POST` menyimpan komentar baru. |
+| `api/comments.js` | Serverless function Vercel. `GET ?page=` mengembalikan jumlah komentar **dan suka** per foto dalam satu permintaan; `GET ?photo=` mengembalikan isi percakapan; `POST` menyimpan komentar baru. |
+| `api/likes.js` | `POST` untuk menyukai dan membatalkannya; `GET ?photo=` untuk jumlah suka satu foto. Memakai ulang helper dari `comments.js` supaya aturan penyaringan dan hashing IP tidak bercabang jadi dua versi. |
 | `comments.js` | Skrip sisi pengunjung. Memasang tombol suka dan lencana komentar di sudut tiap foto, plus panel komentarnya. Kalau API gagal, skrip ini diam dan halaman tampil apa adanya. |
 | `styles.css` | Bagian `--- komentar per foto ---` di paling bawah. |
 | `hari-*.html` | Satu baris `<script src="comments.js" defer>` sebelum `</body>`. |
