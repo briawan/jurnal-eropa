@@ -14,15 +14,21 @@ ditakutkan kalau langkah ini ditunda.
 
 1. Buka **Vercel → project `jurnal-eropa` → tab Storage**
 2. Klik **Create Database → Neon (Serverless Postgres)** → pilih paket gratis
-3. Pastikan project `jurnal-eropa` tercentang saat diminta menghubungkan, lalu **Connect**
+3. Di layar **Connect a Project**: pilih project `jurnal-eropa`, centang **Production** dan
+   **Preview**, dan **biarkan kolom Custom Prefix kosong**. Lalu **Connect**
 4. Buka tab **Deployments**, klik deployment paling atas → **Redeploy**
 
 Selesai. Tabel `comments` dibuat sendiri saat komentar pertama masuk — tidak perlu
 menjalankan SQL apa pun.
 
-Vercel otomatis menyuntikkan `DATABASE_URL` ke project. Kalau nanti Anda pakai penyedia
-Postgres lain, nama variabel berikut juga diterima: `POSTGRES_URL`,
-`DATABASE_URL_UNPOOLED`, `POSTGRES_URL_NON_POOLING`.
+Vercel otomatis menyuntikkan `DATABASE_URL` ke project. Nama variabel lain juga diterima:
+`POSTGRES_URL`, `DATABASE_URL_UNPOOLED`, `POSTGRES_URL_NON_POOLING`. Dan kalau semuanya
+tidak ada, kode akan memakai variabel apa pun yang isinya berbentuk connection string
+Postgres (`postgres://...`) — jadi custom prefix apa pun tetap jalan.
+
+**Kalau komentar tidak muncul**, buka tab **Functions** di Vercel dan lihat lognya.
+Saat connection string tidak ditemukan, log mencatat daftar nama variabel yang tersedia
+(hanya namanya, tidak pernah isinya) supaya ketahuan nama mana yang sebenarnya dipakai.
 
 ### Opsional
 

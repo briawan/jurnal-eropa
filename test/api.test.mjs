@@ -1,7 +1,7 @@
 // Jalankan: npm run test:setup lalu npm test
 // Menguji SQL sungguhan di Postgres sungguhan (PGlite, Postgres versi WASM).
 import { PGlite } from '@electric-sql/pglite';
-import { ensureSchema, handleGet, handlePost } from '../api/comments.js';
+import { ensureSchema, handleGet, handlePost, cariConnectionString } from '../api/comments.js';
 
 const db = new PGlite();
 const sql = async (strings, ...values) => {
@@ -109,6 +109,20 @@ await handleGet(req({ query: { photo: "x.jpg'; drop table comments; --" } }), r,
 check('foto berisi SQL ditolak -> 400', r.out.code === 400, r.out);
 const alive = await sql`select count(*)::int as n from comments`;
 check('tabel masih ada setelah percobaan injeksi', alive[0].n > 0, alive);
+
+// --- pencarian connection string, apa pun nama variabelnya ---
+const PG = 'postgresql://u:p@host/db';
+check('memakai DATABASE_URL kalau ada',
+  cariConnectionString({ DATABASE_URL: PG, STORAGE_URL: 'postgres://lain/x' }) === PG);
+check('memakai POSTGRES_URL kalau DATABASE_URL tidak ada',
+  cariConnectionString({ POSTGRES_URL: PG }) === PG);
+check('menemukan nama tak lazim hasil custom prefix',
+  cariConnectionString({ STORAGE_URL: PG }) === PG);
+check('mendahulukan koneksi ter-pool daripada unpooled',
+  cariConnectionString({ MYDB_URL_UNPOOLED: 'postgres://unpooled/x', MYDB_URL: PG }) === PG);
+check('mengabaikan nilai yang bukan connection string Postgres',
+  cariConnectionString({ SOME_URL: 'https://contoh.com', TOKEN: 'abc' }) === '');
+check('mengembalikan kosong kalau tidak ada apa-apa', cariConnectionString({}) === '');
 
 console.log(`\n${pass} lulus, ${fail} gagal`);
 process.exit(fail ? 1 : 0);

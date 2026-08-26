@@ -1,13 +1,36 @@
 import { neon } from '@neondatabase/serverless';
 import { createHash } from 'node:crypto';
 
-// Integrasi Neon di Vercel menyuntikkan DATABASE_URL; nama lain diterima sebagai cadangan.
-const CONN =
-  process.env.DATABASE_URL ||
-  process.env.POSTGRES_URL ||
-  process.env.DATABASE_URL_UNPOOLED ||
-  process.env.POSTGRES_URL_NON_POOLING ||
-  '';
+// Integrasi Neon di Vercel biasanya menyuntikkan DATABASE_URL, tapi namanya bisa berubah
+// kalau prefix khusus dipakai saat memasang. Nama yang lazim dicoba lebih dulu; kalau tidak
+// ada satu pun, apa pun yang berbentuk connection string Postgres dipakai — supaya
+// pemasangan tidak gagal hanya gara-gara nama variabel.
+const NAMA_LAZIM = [
+  'DATABASE_URL',
+  'POSTGRES_URL',
+  'DATABASE_URL_UNPOOLED',
+  'POSTGRES_URL_NON_POOLING',
+];
+const POSTGRES_URL_RE = /^postgres(?:ql)?:\/\/\S+$/i;
+
+export function cariConnectionString(env) {
+  for (const nama of NAMA_LAZIM) {
+    const nilai = env[nama];
+    if (typeof nilai === 'string' && POSTGRES_URL_RE.test(nilai.trim())) return nilai.trim();
+  }
+  // Cadangan: pindai seluruh env. Yang tanpa "unpooled"/"non_pooling" didahulukan,
+  // karena serverless function lebih cocok memakai koneksi ter-pool.
+  const kandidat = Object.entries(env)
+    .filter(([, v]) => typeof v === 'string' && POSTGRES_URL_RE.test(v.trim()))
+    .map(([k, v]) => [k, v.trim()])
+    .sort(([a], [b]) => {
+      const skor = (n) => (/UNPOOLED|NON_POOLING/i.test(n) ? 1 : 0);
+      return skor(a) - skor(b) || a.localeCompare(b);
+    });
+  return kandidat.length ? kandidat[0][1] : '';
+}
+
+const CONN = cariConnectionString(process.env);
 
 const PHOTO_RE = /^[a-z0-9][a-z0-9._-]{0,80}\.(?:jpg|jpeg|png|webp)$/i;
 const PAGE_RE = /^[a-z0-9][a-z0-9-]{0,40}\.html$/i;
@@ -72,6 +95,12 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
 
   if (!CONN) {
+    // Cuma nama variabelnya yang dicatat, tidak pernah nilainya — supaya penyebabnya
+    // kelihatan di log Vercel (tab Functions) tanpa membocorkan kredensial.
+    console.error(
+      'Tidak ada connection string Postgres. Variabel yang tersedia:',
+      Object.keys(process.env).filter((k) => /URL|POSTGRES|DATABASE|NEON|PG/i.test(k)).join(', ') || '(tidak ada)'
+    );
     return res.status(503).json({ error: 'Database komentar belum dikonfigurasi.' });
   }
 
