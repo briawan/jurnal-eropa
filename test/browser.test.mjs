@@ -2,6 +2,7 @@
 // Menjalankan situs sungguhan + API sungguhan (di atas Postgres WASM) di Chromium sungguhan.
 import http from 'node:http';
 import fs from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import { chromium } from 'playwright';
@@ -57,8 +58,12 @@ const check = (label, cond, detail) => {
   else { fail++; console.log('  FAIL', label, detail !== undefined ? JSON.stringify(detail) : ''); }
 };
 
-// PW_CHROMIUM menunjuk ke Chromium yang sudah terpasang; tanpa itu Playwright pakai bawaannya.
-const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
+// Playwright mencari Chromium versi persis seperti yang dia harapkan, dan gagal kalau yang
+// terpasang beda. Jadi: pakai PW_CHROMIUM kalau diset, kalau tidak pakai Chromium
+// bawaan lingkungan bila ada, baru terakhir serahkan ke Playwright.
+const CHROMIUM_TERPASANG = ['/opt/pw-browsers/chromium', '/usr/bin/chromium', '/usr/bin/chromium-browser'];
+const chromiumPath = process.env.PW_CHROMIUM || CHROMIUM_TERPASANG.find((p) => existsSync(p));
+const browser = await chromium.launch(chromiumPath ? { executablePath: chromiumPath } : {});
 const ctx = await browser.newContext({ viewport: { width: 700, height: 900 } });
 const pageObj = await ctx.newPage();
 const jsErrors = [];   // pengecualian JavaScript sungguhan
