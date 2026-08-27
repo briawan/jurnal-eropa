@@ -176,3 +176,38 @@
   .cmt-panel{padding:14px;margin-bottom:24px;}
   .cmt-bar{right:7px;bottom:7px;gap:5px;}
 }
+
+/* --- ajakan baca di halaman depan --- */
+.hero-cta{display:flex;flex-wrap:wrap;gap:10px;margin:24px 0 0;}
+.btn{display:inline-flex;align-items:center;gap:8px;text-decoration:none;line-height:1;
+  font-family:'Oswald',system-ui,sans-serif;font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;
+  padding:15px 22px;border-radius:2px;border:1px solid transparent;
+  transition:background .15s,color .15s,border-color .15s;}
+.btn .arrow{transition:transform .15s;}
+.btn:hover .arrow{transform:translateX(4px);}
+.btn-primary{background:var(--enamel);color:#F5F3ED;}
+.btn-primary:hover{background:var(--lake);}
+.btn-ghost{background:transparent;color:var(--lake);border-color:var(--line);}
+.btn-ghost:hover{border-color:var(--enamel);color:var(--enamel);}
+
+.hero-stat{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
+  letter-spacing:.05em;line-height:1.7;color:var(--muted);margin:16px 0 0;}
+.hero-stat b{font-weight:500;color:var(--lake);}
+
+.daycard .more{display:inline-flex;align-items:center;gap:6px;margin-top:13px;
+  font-family:'Oswald',sans-serif;font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--enamel);}
+.daycard .more .arrow{transition:transform .15s;}
+.daycard:hover .more .arrow{transform:translateX(4px);}
+.soon .more{color:var(--muted);}
+
+.endnote{background:var(--card);border-left:4px solid var(--brass);border-radius:0 2px 2px 0;
+  padding:24px 22px;margin:10px 0 0;}
+.endnote h2{font-family:'Oswald',sans-serif;font-weight:500;text-transform:uppercase;
+  letter-spacing:.06em;font-size:19px;line-height:1.2;margin:0 0 12px;color:var(--lake);}
+.endnote p{font-size:16.5px;line-height:1.6;margin:0 0 14px;color:#3B4A4E;}
+.endnote p:last-child{margin-bottom:0;}
+
+@media (max-width:520px){
+  .btn{flex:1 1 100%;justify-content:center;}
+}
