@@ -56,5 +56,8 @@ if os.path.getsize(p) > 500*1024: im.save(p, quality=79, optimize=True, progress
 
 ## Yang belum bisa dilakukan dari sesi
 
+- **EXIF Hari 1–10 sudah hilang permanen.** Pipeline PIL di atas menyimpan ulang tanpa EXIF sejak commit pertama, jadi 0 dari 885 berkas di `images/` punya `DateTimeOriginal` — blob git paling awal pun sudah bersih. Berkas asli Hari 1–10 ikut hilang bersama kontainer sesi lama; yang tersisa cuma di ponsel pemilik. Jam di Hari 11–16 selamat karena originalnya masih ada saat halaman itu ditulis.
+- **Sisiran jam dari isi foto Hari 1–7 sudah dilakukan dan hasilnya tipis** (311 foto, 102 kandidat, dua contact sheet + belasan zoom). Yang terbaca cuma teks cetak dari dekat: struk Český Krumlov `21.08.2026 14:10:49` (Hari 4) dan struk Burger King `12.21` (Hari 5). Jam analog jauh — menara Orloj, jam dinding SPBU, layar kasir Billa, kios BK, papan halte — semuanya kalah resolusi di berkas 1400 px. Jam Rolex DXB di Hari 1 terbaca kira-kira saja dan sudah diterbitkan dengan pagar. **Jangan ulangi sisiran ini**; satu-satunya jalan tersisa adalah pemilik mengirim ulang foto aslinya.
+
 - Verifikasi deploy Vercel (konektor tidak berwenang; proxy menolak `*.vercel.app`). Verifikasi dengan membaca `origin/main`.
 - `og:image`, `<link rel="canonical">`, `sitemap.xml` butuh domain produksi yang pasti — belum ada di repo.
