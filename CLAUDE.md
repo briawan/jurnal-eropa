@@ -4,7 +4,7 @@ Situs statis berbahasa Indonesia: jurnal harian perjalanan 16 hari (18 Agustus �
 
 ## Berkas
 
-- `index.html` — beranda: hero, hitungan (`16 dari 16 hari · N foto · 10 video`), 16 kartu hari, endnote.
+- `index.html` — beranda: hero, hitungan (`16 dari 16 hari · N foto · 13 video`), 16 kartu hari, endnote.
 - `hari-01.html` … `hari-16.html` — satu halaman per hari.
 - `404.html` — halaman tidak ketemu, dalam gaya yang sama.
 - `styles.css` — satu-satunya stylesheet. Font: Oswald (judul), Newsreader (isi), ui-monospace (keterangan kecil).
