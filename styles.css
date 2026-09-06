@@ -25,7 +25,7 @@
   .stub-row{display:flex;gap:14px;padding:15px 16px;border-bottom:1px dashed var(--line);}
   .stub-row:last-child{border-bottom:0;}
   .stub-code{font-family:'Oswald',sans-serif;font-weight:600;font-size:15px;letter-spacing:.06em;
-    color:var(--enamel);white-space:nowrap;width:62px;flex:none;padding-top:2px;}
+    color:var(--enamel);white-space:normal;width:62px;flex:none;padding-top:2px;line-height:1.15;}
   .stub-main{flex:1;}
   .stub-route{font-family:'Oswald',sans-serif;font-weight:500;text-transform:uppercase;
     font-size:17px;letter-spacing:.05em;line-height:1.2;}
@@ -212,3 +212,8 @@
 @media (max-width:520px){
   .btn{flex:1 1 100%;justify-content:center;}
 }
+
+/* ---------- utilities (audit 2026-09) ---------- */
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
+.pull .pull-sub{font-size:15px;letter-spacing:.02em;}
+.tips .note{margin:14px 0 0;font-size:15px;opacity:.75;}
